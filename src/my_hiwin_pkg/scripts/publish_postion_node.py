@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+# For auto publish position data to /target_points, simulate meta points
 import rospy
 from custom_msgs.msg import Point, PointArray
 
