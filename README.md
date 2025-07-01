@@ -1,49 +1,102 @@
 # HIWIN ROS MoveIt IK Demo
 
-This package demonstrates a simple workflow for controlling a HIWIN robotic arm using ROS and MoveIt. It consists of two main nodes: one to publish a series of target 3D points and another to calculate the Inverse Kinematics (IK) for these points and publish the corresponding joint angles.
+This package demonstrates a simple workflow for controlling a HIWIN robotic arm using ROS and MoveIt. It consists of two main nodes: one to publish a series of target 3D points, and another to calculate the Inverse Kinematics (IK) for these points and publish the corresponding joint angles **only when triggered**.
 
-## Nodes
+---
+
+## 📦 Nodes
 
 ### `publish_postion_node.py`
 
 This script acts as a simple test client. It publishes a hardcoded array of 3D points to the `/target_points` topic and then exits. This is used to simulate a stream of target coordinates for the robot arm.
 
--   **Publishes to:** `/target_points` ([custom_msgs/PointArray](https://github.com/user/repo/blob/main/custom_msgs/msg/PointArray.msg))
+- **Publishes to:** `/target_points`  
+  Message type: [`custom_msgs/PointArray`](https://github.com/user/repo/blob/main/custom_msgs/msg/PointArray.msg)
+
+---
 
 ### `hiwin_moveit_node.py`
 
-This node subscribes to the `/target_points` topic. Upon receiving a list of points, it iterates through them and calls the `/compute_ik` service provided by MoveIt to find a valid joint configuration for each point.
+This node handles IK computation and conditional joint publishing:
 
--   If a valid IK solution is found for **all** points, it publishes the `sensor_msgs/JointState` for each point sequentially to the `/target_points_joints` topic.
--   If any point is unreachable (i.e., no IK solution is found), it logs a warning and aborts the process for the entire set of points.
+1. Subscribes to `/target_points` (or `Anchor`) to receive a list of 3D target points.
+2. Computes inverse kinematics (IK) for all points via the `/compute_ik` service.
+3. Waits for a signal from `/bool_topic` (`std_msgs/Bool`) to determine whether to publish the resulting joint angles.
+4. If all points are reachable and the trigger signal is `True`, publishes the corresponding `JointState` messages to `/target_points_joints`.
+5. Publishes an IK computation result (`True` or `False`) to `/ik_success`.
 
--   **Subscribes to:** `/target_points` ([custom_msgs/PointArray](https://github.com/user/repo/blob/main/custom_msgs/msg/PointArray.msg))
--   **Publishes to:** `/target_points_joints` (`sensor_msgs/JointState`)
--   **Uses Service:** `/compute_ik` (`moveit_msgs/GetPositionIK`)
+#### Behavior Summary
 
-## Dependencies
+| Condition                                | Result                                                                 |
+|------------------------------------------|------------------------------------------------------------------------|
+| All points are reachable & `/bool_topic` is `True` | Publishes joint angles to `/target_points_joints`; sends `True` to `/ik_success` |
+| Any point is unreachable (IK fails)      | Aborts processing; sends `False` to `/ik_success`                      |
+| `/bool_topic` is `False`                 | Waits until it becomes `True` before proceeding                        |
 
--   `rospy`
--   `moveit_ros_planning_interface`
--   `sensor_msgs`
--   `geometry_msgs`
--   `custom_msgs` (This package requires a custom message definition for `Point` and `PointArray`).
+- **Subscribes to:**
+  - `/target_points` or `Anchor` (`custom_msgs/PointArray`)
+  - `/bool_topic` (`std_msgs/Bool`)
+- **Publishes to:**
+  - `/target_points_joints` (`sensor_msgs/JointState`)
+  - `/ik_success` (`std_msgs/Bool`)
+- **Uses Service:**
+  - `/compute_ik` (`moveit_msgs/GetPositionIK`)
 
-## How to Run
+---
 
-1.  **Launch your robot's MoveIt environment.** This will start the necessary services, including `/compute_ik`.
+## 🔧 Dependencies
+
+Make sure the following packages are installed:
+
+- `rospy`
+- `moveit_ros_planning_interface`
+- `sensor_msgs`
+- `geometry_msgs`
+- `std_msgs`
+- `custom_msgs`  
+  (This package requires a custom message definition for `Point` and `PointArray`.)
+
+---
+
+## ▶️ How to Run
+
+1. **Launch your robot's MoveIt environment.**  
+   This will start the necessary services, including `/compute_ik`.
+
     ```bash
-    roslaunch my_hiwin_pkg demo.launch # Or your specific launch file
+    roslaunch my_hiwin_pkg demo.launch
     ```
 
-2.  **In a new terminal, run the IK solver node.** This node will wait for points to be published.
+2. **Run the IK solver node.**  
+   This node will wait for target points and a trigger signal.
+
     ```bash
     rosrun my_hiwin_pkg hiwin_moveit_node.py
     ```
 
-3.  **In another terminal, run the position publisher node.** This will send the target points to the IK solver.
+3. **Publish the target points.**
+
     ```bash
     rosrun my_hiwin_pkg publish_postion_node.py
     ```
 
-4.  Observe the terminal output from the `hiwin_moveit_node.py` to see the results of the IK calculation and the published joint angles.
+4. **Trigger execution by publishing to `/bool_topic`:**
+
+    ```bash
+    rostopic pub /bool_topic std_msgs/Bool "data: true"
+    ```
+
+5. **Monitor the IK result feedback:**
+
+    ```bash
+    rostopic echo /ik_success
+    ```
+
+---
+
+## 🧪 Message Format Examples
+
+### `custom_msgs/PointArray.msg`
+
+```text
+geometry_msgs/Point[] points
