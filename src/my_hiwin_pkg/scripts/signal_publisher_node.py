@@ -27,16 +27,24 @@ if __name__ == "__main__":
     signal_pub = rospy.Publisher('/robot_signal', String, queue_size=10)
     rospy.sleep(1.0)  # 等待 publisher 註冊完成
 
-    print("請選擇功能：")
-    print("1. 發送固定範例座標點到 /target_points_json")
-    print("2. 發送 robot_signal = 'plan' 到 /robot_signal")
-    func = input("請輸入功能編號 (1/2): ")
+    try:
+        while not rospy.is_shutdown():
+            print("\n請選擇功能：")
+            print("1. 發送固定範例座標點到 /target_points_json")
+            print("2. 發送 robot_signal = 'plan' 到 /robot_signal")
+            print("q. 離開 (quit)")
+            func = input("請輸入功能編號 (1/2/q): ").strip()
 
-    if func == "1":
-        publish_fixed_points(json_pub)
-    elif func == "2":
-        publish_robot_signal(signal_pub)
-    else:
-        print("輸入錯誤，請輸入 1 或 2")
-    
-    rospy.sleep(0.5)
+            if func == "1":
+                publish_fixed_points(json_pub)
+            elif func == "2":
+                publish_robot_signal(signal_pub)
+            elif func.lower() == "q":
+                print("結束程式")
+                break
+            else:
+                print("輸入錯誤，請輸入 1、2 或 q")
+            
+            rospy.sleep(0.2)
+    except KeyboardInterrupt:
+        print("\n已收到 Ctrl+C，程式結束。")
