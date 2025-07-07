@@ -33,8 +33,9 @@ if __name__ == "__main__":
             print("1. 發送固定範例座標點到 /target_points_json")
             print("2. 發送 robot_signal = 'plan' 到 /robot_signal")
             print("3. 發送 robot_signal = 'execute' 到 /robot_signal")
+            print("4. 發送 robot_signal = 'stop' 到 /robot_signal")
             print("q. 離開 (quit)")
-            func = input("請輸入功能編號 (1/2/3/q): ").strip()
+            func = input("請輸入功能編號 (1/2/3/4/q): ").strip()
 
             if func == "1":
                 publish_fixed_points(json_pub)
@@ -42,11 +43,13 @@ if __name__ == "__main__":
                 publish_robot_signal(signal_pub, "plan")
             elif func == "3":
                 publish_robot_signal(signal_pub, "execute")
+            elif func == "4":
+                publish_robot_signal(signal_pub, "stop")
             elif func.lower() == "q":
                 print("結束程式")
                 break
             else:
-                print("輸入錯誤，請輸入 1、2、3 或 q")
+                print("輸入錯誤，請輸入 1、2、3、4 或 q")
             
             rospy.sleep(0.2)
     except KeyboardInterrupt:
