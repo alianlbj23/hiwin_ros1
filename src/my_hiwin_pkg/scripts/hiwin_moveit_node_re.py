@@ -3,22 +3,47 @@ import rospy
 import json
 from std_msgs.msg import String
 from moveit_msgs.srv import GetPositionIK, GetPositionIKRequest
-from sensor_msgs.msg import JointState
 
-ik_ready = False         # 等待 robot_signal 收到 'plan'
-exec_ready = False       # 等待 robot_signal 收到 'Execute'
-latest_joints_reply = None  # 儲存要發佈的 joints 結果
+# 狀態機
+STATE_IDLE = 0          # 尚未收到 target_points_json
+STATE_GOT_JSON = 1      # 收到 target_points_json, 等待 plan
+STATE_PLANNED = 2       # 已收到 plan, 等待 execute
+
+state = STATE_IDLE
+latest_joints_reply = None
+reset_flag = False      # stop 訊號
 
 def robot_signal_callback(msg: String):
-    global ik_ready, exec_ready
-    rospy.loginfo("Received robot_signal: %s", msg.data)
-    cmd = msg.data.strip().lower()
-    if cmd == 'plan':
-        ik_ready = True
-        rospy.loginfo("ik_ready set to True (plan received)")
-    elif cmd == 'execute':
-        exec_ready = True
-        rospy.loginfo("exec_ready set to True (Execute received)")
+    global state, reset_flag
+    signal = msg.data.strip().lower()
+    rospy.loginfo("Received robot_signal: %s", signal)
+
+    if signal == 'stop':
+        reset_all()
+        rospy.logwarn("流程收到 stop, 全部重置")
+        return
+
+    if state == STATE_IDLE:
+        # 尚未收到點雲，提前收到 plan/execute 都直接略過
+        if signal in ('plan', 'execute'):
+            rospy.logwarn("尚未收到 /target_points_json, 忽略指令 %s", signal)
+        return
+
+    if state == STATE_GOT_JSON:
+        if signal == 'plan':
+            publish_tmp_result()
+            state = STATE_PLANNED
+            rospy.loginfo("狀態變更: 已收到 plan, 已發佈 joints_tmp, 等待 execute")
+        elif signal == 'execute':
+            rospy.logwarn("還沒收到 plan 就收到 execute, 忽略")
+        return
+
+    if state == STATE_PLANNED:
+        if signal == 'execute':
+            publish_final_result()
+            reset_all()
+        elif signal == 'plan':
+            rospy.logwarn("已經在等待 execute, 再收到 plan 忽略")
 
 def compute_ik_and_get_joints(p, group='manipulator', frame_id='base_link', ik_link='tool0'):
     try:
@@ -46,7 +71,11 @@ def compute_ik_and_get_joints(p, group='manipulator', frame_id='base_link', ik_l
         return None
 
 def json_callback(msg: String):
-    global ik_ready, exec_ready, latest_joints_reply
+    global state, latest_joints_reply
+    if state != STATE_IDLE:
+        rospy.logwarn("流程尚未完成，忽略新收到的 /target_points_json")
+        return
+
     try:
         data = json.loads(msg.data)
         pts = data.get('points', [])
@@ -54,41 +83,43 @@ def json_callback(msg: String):
         rospy.logerr("Cannot decode points JSON: %s", e)
         return
 
-    for idx, p in enumerate(pts):
-        rospy.loginfo("Target point %d → x: %.6f, y: %.6f, z: %.6f", idx, p['x'], p['y'], p['z'])
-
+    rospy.loginfo("收到 %d 筆目標點，開始 IK 計算…", len(pts))
     joints_list = []
     for i, p in enumerate(pts):
         js = compute_ik_and_get_joints(p)
         if js is None:
             rospy.logwarn("Point %d IK failed: %s", i, p)
             json_pub_tmp.publish(json.dumps({'success': False, 'failed_index': i}))
+            reset_all()
             return
         joints_list.append({'name': js.name, 'position': js.position})
 
-    rospy.loginfo("All points IK OK, waiting for robot_signal == 'plan' …")
-    # 等待收到 plan 指令才發布
-    while not ik_ready and not rospy.is_shutdown():
-        rospy.sleep(0.1)
-
     reply = {'success': True, 'joints': joints_list}
-    reply_str = json.dumps(reply)
-    json_pub_tmp.publish(reply_str)
-    rospy.loginfo("Published all joint angles JSON to /target_points_joints_json_tmp")
-    ik_ready = False
+    latest_joints_reply = json.dumps(reply)
+    rospy.loginfo("IK 已算完，等待 plan 指令 publish joints_tmp")
+    state = STATE_GOT_JSON
 
-    # 儲存內容，準備給 Execute 用
-    latest_joints_reply = reply_str
+def publish_tmp_result():
+    global latest_joints_reply
+    if latest_joints_reply:
+        json_pub_tmp.publish(latest_joints_reply)
+        rospy.loginfo("已發佈 /target_points_joints_json_tmp")
+    else:
+        rospy.logwarn("尚未有 joints result 可送出 (/target_points_joints_json_tmp)")
 
-    rospy.loginfo("Waiting for robot_signal == 'Execute' to publish to /target_points_joints_json …")
-    while not exec_ready and not rospy.is_shutdown():
-        rospy.sleep(0.1)
-
-    # 收到 Execute 後發佈正式 topic
-    if exec_ready:
+def publish_final_result():
+    global latest_joints_reply
+    if latest_joints_reply:
         json_pub.publish(latest_joints_reply)
-        rospy.loginfo("Published all joint angles JSON to /target_points_joints_json")
-        exec_ready = False
+        rospy.loginfo("已發佈 /target_points_joints_json")
+    else:
+        rospy.logwarn("尚未有 joints result 可送出 (/target_points_joints_json)")
+
+def reset_all():
+    global state, latest_joints_reply, reset_flag
+    state = STATE_IDLE
+    latest_joints_reply = None
+    reset_flag = False
 
 if __name__ == "__main__":
     rospy.init_node('ik_json_interface')
