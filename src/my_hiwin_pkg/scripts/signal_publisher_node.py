@@ -16,10 +16,10 @@ def publish_fixed_points(json_pub):
     json_pub.publish(msg)
     rospy.loginfo("已送出 %d 個點 (固定座標，JSON)", len(points))
 
-def publish_robot_signal(signal_pub):
-    msg = String(data='plan')
+def publish_robot_signal(signal_pub, signal):
+    msg = String(data=signal)
     signal_pub.publish(msg)
-    rospy.loginfo("已發送 robot_signal: 'plan'")
+    rospy.loginfo("已發送 robot_signal: '%s'", signal)
 
 if __name__ == "__main__":
     rospy.init_node('my_pointarray_json_publisher')
@@ -32,18 +32,21 @@ if __name__ == "__main__":
             print("\n請選擇功能：")
             print("1. 發送固定範例座標點到 /target_points_json")
             print("2. 發送 robot_signal = 'plan' 到 /robot_signal")
+            print("3. 發送 robot_signal = 'execute' 到 /robot_signal")
             print("q. 離開 (quit)")
-            func = input("請輸入功能編號 (1/2/q): ").strip()
+            func = input("請輸入功能編號 (1/2/3/q): ").strip()
 
             if func == "1":
                 publish_fixed_points(json_pub)
             elif func == "2":
-                publish_robot_signal(signal_pub)
+                publish_robot_signal(signal_pub, "plan")
+            elif func == "3":
+                publish_robot_signal(signal_pub, "execute")
             elif func.lower() == "q":
                 print("結束程式")
                 break
             else:
-                print("輸入錯誤，請輸入 1、2 或 q")
+                print("輸入錯誤，請輸入 1、2、3 或 q")
             
             rospy.sleep(0.2)
     except KeyboardInterrupt:
