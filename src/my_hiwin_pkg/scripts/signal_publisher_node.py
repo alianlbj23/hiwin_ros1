@@ -16,10 +16,13 @@ def publish_fixed_points(json_pub):
     json_pub.publish(msg)
     rospy.loginfo("已送出 %d 個點 (固定座標，JSON)", len(points))
 
-def publish_robot_signal(signal_pub, signal):
-    msg = String(data=signal)
+def publish_robot_signal(signal_pub, command):
+    # 把 command 包装成 JSON 字符串
+    data = {"command": command}
+    json_str = json.dumps(data)
+    msg = String(data=json_str)
     signal_pub.publish(msg)
-    rospy.loginfo("已發送 robot_signal: '%s'", signal)
+    rospy.loginfo("已發送 robot_signal JSON: %s", json_str)
 
 if __name__ == "__main__":
     rospy.init_node('my_pointarray_json_publisher')
@@ -31,9 +34,9 @@ if __name__ == "__main__":
         while not rospy.is_shutdown():
             print("\n請選擇功能：")
             print("1. 發送固定範例座標點到 /target_points_json")
-            print("2. 發送 robot_signal = 'plan' 到 /robot_signal")
-            print("3. 發送 robot_signal = 'execute' 到 /robot_signal")
-            print("4. 發送 robot_signal = 'stop' 到 /robot_signal")
+            print("2. 發送 robot_signal = plan")
+            print("3. 發送 robot_signal = execute")
+            print("4. 發送 robot_signal = stop")
             print("q. 離開 (quit)")
             func = input("請輸入功能編號 (1/2/3/4/q): ").strip()
 
