@@ -15,26 +15,16 @@ reset_flag = False      # stop 訊號
 
 def robot_signal_callback(msg: String):
     global state, reset_flag
-
-    # 1. 尝试解析 JSON，获取 command 字段
-    raw = msg.data.strip()
-    try:
-        payload = json.loads(raw)
-        signal = str(payload.get('command', '')).strip().lower()
-    except (json.JSONDecodeError, TypeError):
-        # 如果不是合法 JSON，则当作简单字符串处理
-        signal = raw.lower()
-
+    signal = msg.data.strip().lower()
     rospy.loginfo("Received robot_signal: %s", signal)
 
-    # 2. 处理 stop
     if signal == 'stop':
         reset_all()
         rospy.logwarn("流程收到 stop, 全部重置")
         return
 
-    # 3. 根据当前状态，处理 plan/execute
     if state == STATE_IDLE:
+        # 尚未收到點雲，提前收到 plan/execute 都直接略過
         if signal in ('plan', 'execute'):
             rospy.logwarn("尚未收到 /target_points_json, 忽略指令 %s", signal)
         return
@@ -54,7 +44,6 @@ def robot_signal_callback(msg: String):
             reset_all()
         elif signal == 'plan':
             rospy.logwarn("已經在等待 execute, 再收到 plan 忽略")
-
 
 def compute_ik_and_get_joints(p, group='manipulator', frame_id='base_link', ik_link='tool0'):
     try:
